@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.Scanner;
 import java.util.Set;
 import java.util.stream.Collector;
@@ -75,16 +76,6 @@ public class Spel {
 	spelerslijst.get(0).zetAanBeurt(true);
     }
 
-    public void speel() {
-
-	while (kwartetlijst.size() < this.getKaartgroeplijst().size()) {
-	    speelRonde();
-	}
-	System.out.println("Het spel is klaar.");
-	this.getKwartetlijst().stream().forEach(kw -> System.out.println(kw.getSpeler() + " heeft kwartet met " + kw.getGroep()));
-	// todo: pronounce winner.
-    }
-
     public void maakSchoneKaartenLijst() {
 	KaartGroep p = new KaartGroep("p");
 	KaartGroep k = new KaartGroep("k");
@@ -145,6 +136,10 @@ public class Spel {
 
 	this.setKaartenlijst(kaartenlijst);
     }
+    
+    public void controleerGeldigheid() {
+	this.setGeldigheid(kaartenlijst.size() % spelerslijst.size() == 0);
+    }
 
     public List<Kaart> schudKaarten(List<Kaart> kaartenlijst) {
 	List<Kaart> kaartenlijstGeschud = new ArrayList<>();
@@ -181,16 +176,22 @@ public class Spel {
 	}
     }
 
+    public void speel() {
+	while (kwartetlijst.size() < this.getKaartgroeplijst().size()) {
+	    speelRonde();
+	}
+	System.out.println("Het spel is klaar.");
+	this.getKwartetlijst().stream().forEach(kw -> System.out.println(kw.getSpeler() + " heeft kwartet met " + kw.getGroep()));
+	// todo: pronounce winner
+    }
+    
+    // alleen voor debuggen:
     public void toonSpel() {
 	spelerslijst.stream().forEach(s -> System.out.println("Speler: " + s));
 	kaartenlijst.stream().forEach(k -> System.out
 		.println("Kaart: " + k.getGroep() + " " + k.getWoord() + " is van speler " + k.getSpeler()));
     }
-
-    public void controleerGeldigheid() {
-	this.setGeldigheid(kaartenlijst.size() % spelerslijst.size() == 0);
-    }
-
+    
     public void speelRonde() {
 	spelerslijst.stream().filter(s -> s.isAanDeBeurt()).forEach(s -> {
 	    System.out.println(s.getNaam() + " is aan de beurt.");
@@ -211,6 +212,8 @@ public class Spel {
 	if (eigenKaarten.size() == 0) {
 	    schuifBeurtOp(speler);
 	    System.out.println(speler + " heeft geen kaarten meer.");
+	    // voorkom dat speler nog bevraagd wordt:
+	    this.getSpelerslijst().remove(speler);
 	    return;
 	}
 
@@ -264,8 +267,7 @@ public class Spel {
 	    mogelijkeGroep = System.console().readLine().toLowerCase();
 	    final String mogelijkeGroepFinal = mogelijkeGroep;
 
-	    gevraagdeGroepBekend = eigenKaartgroepen.stream().filter(g -> g.getGroep().equals(mogelijkeGroepFinal))
-		    .collect(Collectors.toList()).size() == 1;
+	    gevraagdeGroepBekend = eigenKaartgroepen.stream().anyMatch(g -> g.getGroep().equals(mogelijkeGroepFinal));
 	    if (!gevraagdeGroepBekend) {
 		System.out.println(mogelijkeGroep + " is niet een groep waar je van kan vragen.");
 	    }
@@ -280,9 +282,8 @@ public class Spel {
 	    mogelijkWoord = System.console().readLine().toLowerCase();
 	    final String mogelijkWoordFinal = mogelijkWoord;
 	    final String mogelijkeGroepFinal = mogelijkeGroep;
-	    gevraagdWoordBekend = vraagbareKaarten.stream().filter(
-		    k -> k.getWoord().equals(mogelijkWoordFinal) && k.getGroep().getGroep().equals(mogelijkeGroepFinal))
-		    .collect(Collectors.toList()).size() == 1;
+	    gevraagdWoordBekend = vraagbareKaarten.stream()
+		    .anyMatch(k -> k.getWoord().equals(mogelijkWoordFinal) && k.getGroep().getGroep().equals(mogelijkeGroepFinal));
 	    if (!gevraagdWoordBekend) {
 		System.out.println(mogelijkWoord
 			+ " is niet een woord dat je nu kan vragen of het woord staat in een andere groep.");
@@ -296,21 +297,22 @@ public class Spel {
 		k -> k.getGroep().getGroep().equals(mogelijkeGroepFinal) && k.getWoord().equals(mogelijkWoordFinal))
 		.collect(Collectors.toList()).get(0);
 
-	boolean gevraagdeSpelerBekend = false;
 	Speler mogelijkeSpeler = null;
 
-	while (!gevraagdeSpelerBekend) {
+	while (mogelijkeSpeler == null) {
 	    System.out.println("En aan wie wil je die kaart vragen?");
 	    String mogelijkeSpelerNaam = System.console().readLine();
-	    List<Speler> gevraagdeSpelerlijst = this.getSpelerslijst().stream()
-		    .filter(s -> s.getNaam().equalsIgnoreCase(mogelijkeSpelerNaam)).collect(Collectors.toList());
-
-	    if (gevraagdeSpelerlijst.size() == 1) {
-		mogelijkeSpeler = gevraagdeSpelerlijst.get(0);
-		gevraagdeSpelerBekend = true;
-	    } else {
+	    Optional<Speler> optSpeler = this.getSpelerslijst().stream()
+		    .filter(s -> s.getNaam().equalsIgnoreCase(mogelijkeSpelerNaam))
+		    .findFirst();
+	    
+	    if(!optSpeler.isPresent()) {
 		System.out.println(mogelijkeSpelerNaam + " is niet de naam van een andere speler in dit spel.");
+		break;
 	    }
+	    
+	    mogelijkeSpeler = optSpeler.get();
+	    	    
 	}
 
 	return vraag(mogelijkeKaart, speler, mogelijkeSpeler);
@@ -335,7 +337,7 @@ public class Spel {
 	if (kaart.getSpeler().equals(gevraagde)) {
 	    kaart.setSpeler(vragende);
 	    System.out.println(gevraagde + " zegt: Ja.");
-	    System.out.println(gevraagde + " geeft " + kaart + " aan " + vragende);
+	    System.out.println(gevraagde + " geeft " + kaart.getWoord() + " aan " + vragende);
 	    return true;
 	} else {
 	    System.out.println(gevraagde + " zegt: Nee, die heb ik niet.");
@@ -358,10 +360,7 @@ public class Spel {
 
     public void schuifBeurtOp(Speler speler) {
 	int indexHuidigeSpeler = this.getSpelerslijst().indexOf(speler);
-	//System.out.println("DEBUG index huidige speler " + indexHuidigeSpeler);
-	int indexNieuweSpeler = (indexHuidigeSpeler == this.getSpelerslijst().size() - 1) ? 0 : ++indexHuidigeSpeler;
-	//System.out.println("DEBUG index nieuwe speler " + indexNieuweSpeler);
-	
+	int indexNieuweSpeler = (indexHuidigeSpeler == this.getSpelerslijst().size() - 1) ? 0 : ++indexHuidigeSpeler;	
 	speler.zetAanBeurt(false);
 	Speler nieuweSpeler = this.getSpelerslijst().get(indexNieuweSpeler);
 	nieuweSpeler.zetAanBeurt(true);
@@ -369,6 +368,3 @@ public class Spel {
     }
 
 }
-
-//.entrySet().stream().sorted(Collections.reverseOrder(Entry.comparingByValue())).collect(Collectors.toMap(
-//        Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new))
